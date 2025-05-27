@@ -1,16 +1,40 @@
 Package: ShinyStatMatcher
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Run the ShinyStatMatcher App
 Version: 0.1.0
 Authors@R: c(
     person(
-      "Jane", "Doe",
-      email = "jane@example.com",
-      role = c("aut", "cre")
-    )
+      "Fedele", "Greco",
+      email = "fedele.greco@unibo.it",
+      role = c("aut")
+      ),
+    person(
+      "Lucia", "Guastadisegni",
+      email = "lucia.guastadisegni2@unibo.it",
+      role = c("cre")
+      )
   )
-Description: More about what it does (maybe more than one line).
-    Continuation lines should be indented.
-License: What license is it under?
+Description: The ShinyStatMatcher App allows interactive implementation of Statistical Matching Methods.
+License: GPL-3
 Encoding: UTF-8
 LazyData: true
+Imports: 
+    purrr,
+    dplyr,
+    magrittr,
+    tibble,
+    rmarkdown,
+    flexdashboard,
+    shiny,
+    shinyWidgets,
+    shinydashboard,
+    StatMatch,
+    lmtest,
+    nortest,
+    corrplot,
+    rpart,
+    labelled,
+    rpart.plot,
+    plotly,
+    xtable,
+    shinybusy

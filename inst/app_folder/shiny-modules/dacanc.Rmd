@@ -1,0 +1,36 @@
+---
+title: "Full width downloadButton"
+output: 
+  flexdashboard::flex_dashboard:
+    css: styles.css
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+```
+
+Inputs {.sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+# Create placeholder for the downloadButton
+uiOutput("downloadUI")
+```
+
+```{r}
+# Create the actual downloadButton
+output$downloadUI <- renderUI( {
+  downloadButton("downBtn", "Download Iris data", style = "width:30%;")
+})
+
+# Add download handling
+output$downBtn <- downloadHandler(
+  filename = function() {
+    "iris.csv"
+  },
+  content = function(file) {
+    write.csv(iris, file, row.names = FALSE)
+  }
+)
+```

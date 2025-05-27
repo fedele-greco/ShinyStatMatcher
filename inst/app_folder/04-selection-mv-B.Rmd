@@ -1,0 +1,116 @@
+Colonna B {.sidebar}
+-----------------------------------------------------------------------
+### 
+
+#### 
+```{r}
+renderUI({
+  req(X_B())
+  pickerInput(inputId = "resp_varB", label = "Select Response Variable", 
+              choices = names(X_B()), multiple = TRUE, selected = NULL,
+              options = pkr_opt)
+})
+```
+#### 
+```{r}
+renderUI({
+  req(input$resp_varB)
+  names_all <- unique(c(names(X_B())))
+  lbs <- names_all[!(names_all%in%c(input$resp_varB))]
+  pickerInput(inputId = "predictorsB", label = "Select predictors", 
+              choices = lbs, multiple = TRUE, selected = NULL,
+              options = pkr_opt)
+})
+```
+#### 
+```{r}
+renderUI({
+  req(input$resp_varB)
+  req(input$predictorsB)
+  req(X_B())
+  choices_method <- c("Classification tree")
+  if(is.numeric(X_B()[[input$resp_varB]])){
+    choices_method <- c("Multivariate regression", "Regression tree")
+  }
+  pickerInput(inputId = "method_sel_B", label = "Select the method", 
+              choices = choices_method, 
+              selected = NULL, multiple = TRUE,
+              options = pkr_opt)
+})
+
+renderUI({
+  req(input$method_sel_B)
+  actionButton("done_method_sel_B", "Run Alghorithm", icon("paper-plane"), 
+               style="color: #fff; background-color: #337ab7; border-color: #2e6da4")
+})
+
+```
+
+Colonna out {.tabset}
+-----------------------------------------------------------------------
+### Model Output
+
+```{r}
+
+output_regression_B <- reactive({
+  req(X_B())
+  req(input$resp_varB)
+  req(input$predictorsB)
+  req(input$method_sel_B)
+  req(input$done_method_sel_B)
+  
+  out <-out1<- out2 <-out3<- NULL
+  if(input$done_method_sel_B){
+    if(input$method_sel_B=="Multivariate regression"){
+      formula <- as.formula(paste(input$resp_varB, "~", paste(input$predictorsB, collapse = "+")))
+      out1 <- lm(formula, data = X_B())
+      out <- summary(lm(formula, data = X_B()))
+      if(length(input$predictorsB)>2){
+        out2<-car::vif(out1)
+      }
+    }
+    else if(input$method_sel_B %in% c("Regression tree", "Classification tree")){
+      formula <- as.formula(paste(input$resp_varB, "~", paste(input$predictorsB, collapse = "+")))
+      out <- rpart(formula, data = X_B(),method="anova")
+      
+    }
+  }
+  list(o1 = out, o2 = out1)
+})
+```
+
+```{r}
+renderUI({
+  req(output_regression_B())
+  req(input$done_method_sel_B)
+  req(input$method_sel_B)
+  
+  renderPrint({
+    output_regression_B()$o1
+  })
+  
+})
+
+```
+
+
+
+### Plot
+```{r}
+renderPlot({
+  req(output_regression_B())
+  req(input$done_method_sel_B)
+  req(input$method_sel_B)
+  
+  if(input$method_sel_B%in% c("Regression tree", "Classification tree")){
+    rpart.plot(output_regression_B()$o1)
+  }
+  if(input$method_sel_B%in% c("Multivariate regression")){
+    par(mfrow=c(2,2))
+    plot(output_regression_B()$o2)
+    par(mfrow=c(1,1))
+  }
+  
+})
+
+```

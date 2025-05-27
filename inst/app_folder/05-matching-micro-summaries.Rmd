@@ -1,0 +1,159 @@
+Colonna {.tabset data-width=300}
+-----------------------------------------------------------------------
+
+### Evaluation of the matching methods
+```{r}
+eval_match <- reactive({
+  req(matched_final())
+  out.1 <- out.2 <- out <- NULL
+  
+  # Handle numeric variables
+  if (is.numeric(db_match_B()[[input$z_donor]])) {
+    out <- comp.cont(
+      data.A = as.data.frame(matched_final()),
+      data.B = as.data.frame(db_match_B()),
+      xlab.A = "Z_match",
+      xlab.B = input$z_donor
+    )
+  }
+  
+  # Handle categorical variables
+  if (is.factor(db_match_B()[[input$z_donor]])) {
+    t.Z<-table(db_match_B()[input$z_donor])
+    t.Z.sc<-table(matched_final()["Z_match"])
+    out.1 <- comp.prop(p1 = t.Z, p2 = t.Z.sc, n1 = nrow(matched_final()), ref = TRUE)
+    
+    if (is.factor(db_match_B()[[input$match_vars]])) {
+      t.xZ <-table(db_match_B()[c(input$match_vars,input$z_donor)])
+      t.xZ.sc <-table(matched_final()[c(input$match_vars,"Z_match")])
+      out.2 <- comp.prop(p1 = t.xZ, p2 = t.xZ.sc, n1 = nrow(matched_final()), ref = TRUE)
+    }
+    out <- list(out.1, out.2)
+  }
+  out
+})
+
+renderPrint({
+  req(eval_match())
+  eval_match()
+})
+```
+
+
+### Plot
+
+```{r}
+renderPlot({
+  req(matched_final())
+  tb_a <- select(matched_final(), all_of(c("Z_match", input$match_vars)))
+  names(tb_a)[1] <- "Z"
+  tb_a$database <- "Recipient"
+  tb_b <- select(db_match_B(), all_of(c(input$z_donor, input$match_vars)))
+  names(tb_b)[1] <- "Z"
+  tb_b$database <- "Donor"
+  tb_AB <- bind_rows(tb_a, tb_b)
+  
+  if(class(tb_AB$Z) == "numeric" | class(tb_AB$Z) == "integer"){
+    out <- tb_AB %>%
+      ggplot(aes(x = Z, group = database, col = database)) +
+      geom_density()
+  }
+  if(class(tb_AB$Z) == "factor"){
+    out <- tb_AB %>% group_by(database, Z) %>%
+      summarise(n = n()) %>%
+      mutate(n = n / sum(n)) %>% 
+      ggplot(aes(x = Z, y = n, group = as.factor(database), fill = database)) +
+      geom_bar(position="dodge", stat="identity")
+  }
+  out
+})
+```
+
+Storage and download {data-navmenu="Micro Matching"}
+=================================================================
+
+Sidebar  {.sidebar}
+-----------------------------------------------------------------------
+
+
+### Save matched variable
+
+Here you can choose to store the last obtained matched variable.
+
+```{r}
+
+renderUI({
+  #req(matched_final())
+  tagList(
+    textInput("name_Z_export", "Matched variable name", value = "new_name"),
+    actionButton("export_Z", "Save matched variable", icon("paper-plane"), style = "width:210px;", 
+                 style="color: #fff; background-color: #337ab7; border-color: #2e6da4"),
+    checkboxInput("see_whole_new", "Check if you want to see the db", value = FALSE, width = NULL)
+  )
+})
+```
+
+<br><br><br><br><br><br><br><br>
+
+### Download {data-height=100}
+
+Click here to download data. The imported recipient along with matched variables will be downloaded.
+
+```{r}
+output$downloadData <- downloadHandler(
+  filename = function() { 
+    paste("dataset-", Sys.Date(), ".csv", sep="")
+  },
+  content = function(file) {
+    write.csv(DBout(), file)
+  })
+
+output$downloadUI <- renderUI( {
+  downloadButton('downloadData', 'Download data', style = "width:210px;", 
+                 style="color: #fff; background-color: #337ab7; border-color: #2e6da4")
+})
+
+uiOutput("downloadUI")
+```
+Ciccio  
+-----------------------------------------------------------------------
+
+```{r}
+DBout <- reactiveVal()
+kk <- reactiveVal(0)
+
+observeEvent(input$export_Z, {
+  
+  if(kk() == 0){
+    DBout(Ak())
+    kk(1)
+  }
+  
+  tmp <- matched_final()
+  nm <- names(tmp)
+  nm[nm == "Z_match"] <- input$name_Z_export
+  names(tmp) <- nm
+  
+  if(kk()>0){
+    DBout(
+      left_join(
+        DBout(),
+        select(tmp, key_recipient, all_of(input$name_Z_export)))
+    )}
+  updateTextInput(session, "name_Z_export", value = "")
+})
+```
+
+### Matched variables available for download
+
+```{r}
+DT::renderDT({
+  req(DBout())
+  if(input$see_whole_new){
+    out <- DBout()
+  } else {
+    out <- bind_cols(DBout()$key_recipient, DBout()[!(names(DBout()) %in% names(A()))])
+  }
+  out
+})
+```

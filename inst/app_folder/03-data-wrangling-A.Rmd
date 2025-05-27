@@ -1,0 +1,151 @@
+Colonna A {.sidebar}
+-----------------------------------------------------------------------
+
+### 
+
+#### 
+
+```{r}
+renderUI({    
+  req(Info_AR())
+  pickerInput(
+    inputId = "i3A_to_transf", label = "Select a variable (or a group of variables) to transform", multiple = TRUE,
+    choices = names(Info_AR())[-1],
+    options = c(pkr_opt, `actions-box` = TRUE)
+  )
+})
+```
+
+#### 
+
+```{r}
+renderUI({
+  req(input$i3A_to_transf)
+  
+  nvs <- length(c(input$i3A_to_transf))
+  if(nvs == 1){
+    pickerInput(
+      inputId = "i3A_quale_transf",
+      label = "Select a transformation (one variable)",
+      multiple = TRUE,
+      choices = list(`Transform a single variable` = trans_single),
+      options = pkr_opt
+    )
+  }else{
+    pickerInput(
+      inputId = "i3A_quale_transf",
+      label = "Select a transformation (several variables)",
+      multiple = TRUE,
+      choices = list(
+        `Transform a group of variables` = trans_multi),
+      options = pkr_opt
+    )
+  }
+})
+
+renderUI({
+  req(input$i3A_quale_transf)
+  actionButton("i3A_done_trans", "Click when done", icon("paper-plane"), 
+               style="color: #fff; background-color: #337ab7; border-color: #2e6da4")
+})
+```
+
+Colonna wrang {.tabset}
+-----------------------------------------------------------------------
+### Create a variable to be assigned to $\mathbf{X}_A$
+
+```{r}
+var_to_transform_A <- reactive({
+  req(input$i3A_quale_transf)
+  if(input$i3A_quale_transf %in% trans_single){
+    out_data <- Info_AR()[[input$i3A_to_transf]]
+  }
+  if(input$i3A_quale_transf %in% trans_multi){
+    out_data <- Info_AR()[input$i3A_to_transf]
+  }
+  out_data
+})
+
+# 
+uiOutput("ui_trans_A")
+output$ui_trans_A <- renderUI({
+  req(input$i3A_quale_transf)
+  req(input$i3A_to_transf)
+  
+  if(input$i3A_quale_transf == "Add as it is") {
+    u <- add_as_is_UI("id_var_add_as_is_A", input$i3A_to_transf)
+  }
+  if(input$i3A_quale_transf == "Rename variable") {
+    u <- no_trans_UI("id_var_no_trans_A")
+  }
+  if(input$i3A_quale_transf == "Quantitative to categorical") {
+    u <- quant_to_cat_UI("id_var_trans_quant_to_cat_A")
+  }
+  if(input$i3A_quale_transf == "Recode a factor") {
+    u <- cat_to_cat_UI("id_var_trans_cat_to_cat_A")
+  }
+  if(input$i3A_quale_transf == "Count the number of occurrences") {
+    u <- conta_se_vec_UI("id_var_trans_conta_se_A")
+  }
+  if(input$i3A_quale_transf == "Check if some categories occur row-wise") {
+    u <- check_se_vec_UI("id_var_trans_check_se_A")
+  }
+  if(input$i3A_quale_transf == "Sum row-wise") {
+    u <- somma_vec_UI("id_var_trans_somma_A")
+  }
+  u
+})
+
+out_add_as_is_A <- add_as_is_SERVER("id_var_add_as_is_A", var_to_transform_A)
+out_no_trans_A <- no_trans_SERVER("id_var_no_trans_A", var_to_transform_A)
+out_quant_to_cat_A <- quant_to_cat_SERVER("id_var_trans_quant_to_cat_A", var_to_transform_A)
+out_cat_to_cat_A <- cat_to_cat_SERVER("id_var_trans_cat_to_cat_A", var_to_transform_A)
+out_conta_se_A <- conta_se_vec_SERVER("id_var_trans_conta_se_A", var_to_transform_A)
+out_check_se_A <- check_se_vec_SERVER("id_var_trans_check_se_A", var_to_transform_A)
+out_somma_A <- somma_vec_SERVER("id_var_trans_somma_A", var_to_transform_A)
+
+transformed_var_A <- reactive({
+  req(input$i3A_quale_transf)
+  if(input$i3A_quale_transf == "Add as it is") {
+    u <- as_tibble(out_add_as_is_A())
+  }
+  if(input$i3A_quale_transf == "Rename variable") {
+    u <- as_tibble(out_no_trans_A())
+  }
+  if(input$i3A_quale_transf == "Quantitative to categorical") {
+    u <- as_tibble(out_quant_to_cat_A())
+  }
+  if(input$i3A_quale_transf == "Recode a factor") {
+    u <- as_tibble(out_cat_to_cat_A())
+  }
+  if(input$i3A_quale_transf == "Count the number of occurrences") {
+    u <- as_tibble(out_conta_se_A())
+  }
+  if(input$i3A_quale_transf == "Check if some categories occur row-wise") {
+    u <- as_tibble(out_check_se_A())
+  }
+  if(input$i3A_quale_transf == "Sum row-wise") {
+    u <- as_tibble(out_somma_A())
+  }
+  u
+})
+
+# STORAGE VARIABILI TRASFORMATE ---- IMPORTANTISSIMO OGGETTO
+X_A <- reactiveVal()
+
+observeEvent(input$i3A_done_trans, {
+  X_A(bind_cols(X_A(), transformed_var_A()))
+  if(!(names(transformed_var_A()) %in% names(Info_AR()))){
+    Info_AR(bind_cols(Info_AR(), transformed_var_A()))
+  }
+  updatePickerInput(session = session, inputId = "i3A_quale_transf", selected = "")
+  updatePickerInput(session = session, inputId = "i3A_to_transf", selected = "")
+})
+
+```
+### See the $\mathbf{X}_A$ data frame
+```{r}
+DT::renderDT({
+  X_A()
+})
+```

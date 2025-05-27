@@ -1,0 +1,89 @@
+selezione vars A (sx) {data-width=500}
+-----------------------------------------------------------------------
+
+### Select information from the recipient survey ($\mathbf{\mathcal{I}}_A$)
+
+```{r}
+Ak <- reactive({
+  req(A())
+  if(is.null(input$key_var_A)){
+    out <- bind_cols(key_recipient = 1:nrow(A()), A())
+  } else {
+    out <- A()
+    names(out)[names(out) == input$key_var_A] <- "key_recipient"
+    out <- out %>% select("key_recipient", everything())
+  }
+  out
+})
+```
+
+```{r}
+DT::DTOutput("i2A_vars")
+
+vars_A <- reactive({
+  req(Ak())
+  ch_A <- names(Ak())
+  ch_A <- ch_A[!(ch_A %in% "key_recipient")]
+  tibble("Variable Name" = ch_A,
+         Label = sapply(ch_A, function(var) {
+           lbl <- var_label(Ak()[[var]])
+           if (is.null(lbl)) "No label provided" else lbl  # Replace NULL with an empty string
+         }),
+         Type = sapply(ch_A, function(var) {
+           class(Ak()[[var]])
+         })
+  )
+})
+
+output$i2A_vars <- DT::renderDT({
+  req(vars_A())
+  DT::datatable(vars_A(),
+                rownames = FALSE,
+                filter='top',
+                selection = 'multiple')
+})
+
+Info_AR <- reactiveVal()
+
+Info_A <- reactive({
+  req(Ak())
+  req(input$i2A_vars_rows_selected)
+  Ak()[, c(1, input$i2A_vars_rows_selected + 1)]
+})
+
+observeEvent(input$i2A_vars_rows_selected,{
+  Info_AR(Info_A())             
+})
+
+
+
+```
+
+Selected info A (dx) {data-width=500}
+-----------------------------------------------------------------------
+
+### Selected info from the recipient survey ($\mathbf{\mathcal{I}}_A$)
+
+```{r}
+DT::renderDT({
+  req(input$i2A_vars_rows_selected)
+  DT::datatable(vars_A()[
+    input$i2A_vars_rows_selected,], rownames = FALSE)
+})
+```
+
+<!-- Prova 1 -->
+<!-- ================================================================= -->
+
+<!-- ### ciao -->
+
+<!-- ```{r} -->
+<!-- DT::renderDT({ -->
+<!--   req(Info_A()) -->
+
+<!--   DT::datatable( -->
+<!--     Info_A(),  -->
+<!--     rownames = FALSE) -->
+<!-- }) -->
+
+<!-- ``` -->

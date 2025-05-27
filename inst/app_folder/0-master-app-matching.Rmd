@@ -1,0 +1,147 @@
+---
+title: "StatMatcher"
+output: flexdashboard::flex_dashboard
+runtime: shiny
+resource_files:
+- "indagini/"
+- "shiny-modules/"
+---
+
+```{r global, include=TRUE}
+library(shiny)
+library(flexdashboard)
+library(tidyverse)
+library(shinyWidgets)
+library(shinydashboard)
+library(StatMatch)
+library(lmtest)
+library(nortest)
+library(corrplot)
+library(rpart)
+library(labelled)
+library(rpart.plot)
+library(plotly)
+library(xtable)
+
+ui <- shinyUI(
+  fluidPage(
+    dataTableOutput("data")
+  )
+)
+options(DT.options = list(
+  rownames = FALSE, scrollX = TRUE, scrollY = TRUE, pageLength = 25,fillContainer = TRUE))
+#pickerOptions(style = "btn-link")
+pkr_opt <- list(style = "btn", container = "body", `live-search`=TRUE)
+options(shiny.maxRequestSize=1500*1024^2)
+# tutto da aggiustare, nomi_indagini deve essere funzione di input
+# e anche read_rds, input dipende dal contenuto della cartella indagini ......
+source("shiny-modules/module_add_as_it_is.R")
+source("shiny-modules/module_quant_to_cat.R")
+source("shiny-modules/module_cat_to_cat.R")
+source("shiny-modules/module_conta_se_vec.R")
+source("shiny-modules/module_check_se_vec.R")
+source("shiny-modules/module_no_trans.R")
+source("shiny-modules/module_somma_vec.R")
+
+trans_single <- c("Add as it is", "Rename variable", "Quantitative to categorical", "Recode a factor")
+trans_multi <- c("Count the number of occurrences", "Check if some categories occur row-wise", "Sum row-wise")
+micro_methods <- list(
+  parametric = c(
+    "Parametric: Conditional mean matching",
+    "Parametric: Stochastic regression"),
+  nonparametric = c(
+    "Non-parametric: Rank Hot Deck",
+    "Non-parametric: Random Hot Deck",
+    "Non-parametric: Distance Hot Deck",
+    "Non-parametric: Random Distance Hot Deck"),
+  nonparametric_noRank = c(
+    "Non-parametric: Random Hot Deck",
+    "Non-parametric: Distance Hot Deck",
+    "Non-parametric: Random Distance Hot Deck"),
+  nonparametric_dist = c(
+    "Non-parametric: Distance Hot Deck",
+    "Non-parametric: Random Distance Hot Deck")
+)
+
+shiw_semp <- read_rds("indagini/shiw_2020_app_demo.rds")
+hbs_semp <- read_rds("indagini/hbs_2020_app_demo.rds")
+nomi_indagini <- c("SHIW-2020", "HBS-2020")
+indagini1 <- list(shiw_semp, hbs_semp)
+names(indagini1) <- nomi_indagini
+
+indagini <- reactiveValues()
+indagini[["SHIW-2020"]] <- shiw_semp
+indagini[["HBS-2020"]] <- hbs_semp
+```
+
+
+Available surveys
+=======================================================================
+
+```{r child = '01-info.Rmd'}
+```
+
+Select info for matching - Recipient data {data-navmenu="Select info for matching"}
+=================================================================
+
+```{r child = '02-selezione-info-A.Rmd'}
+```
+
+Select info for matching - Donor data {data-navmenu="Select info for matching"}
+=================================================================
+
+```{r child = '02-selezione-info-B.Rmd'}
+```
+
+Data wrangling - Recipient data {data-navmenu="Data wrangling"}
+=================================================================
+
+```{r child = '03-data-wrangling-A.Rmd'}
+```
+
+Data wrangling - Donor data {data-navmenu="Data wrangling"}
+=================================================================
+
+```{r child = '03-data-wrangling-B.Rmd'}
+```
+
+Check harmonization {data-navmenu="Data wrangling"}
+=================================================================
+
+```{r child = '03-check-data-harmonization.Rmd'}
+```
+
+Selection of matching variables - Recipient data {data-navmenu="Selection of matching variables"}
+=======================================================================
+
+```{r child = '04-selection-mv-A.Rmd'}
+```
+
+Selection of matching variables - Donor data {data-navmenu="Selection of matching variables"}
+=======================================================================
+
+```{r child = '04-selection-mv-B.Rmd'}
+```
+
+
+Matching {data-navmenu="Macro Matching"}
+=================================================================
+
+```{r child = '05-matching-macro.Rmd'}
+```
+
+Matching {data-navmenu="Micro Matching"}
+=================================================================
+
+```{r child = '05-matching-micro.Rmd'}
+```
+
+Summaries {data-navmenu="Micro Matching"}
+=================================================================
+
+```{r child = '05-matching-micro-summaries.Rmd'}
+```
+
+
+
+

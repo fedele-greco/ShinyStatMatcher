@@ -1,0 +1,270 @@
+Colonna {.sidebar}
+-----------------------------------------------------------------------
+
+
+Click on variables in $\mathbf{X}_A$ and $\mathbf{X}_B$ to view descriptive statistics.
+
+
+```{r}
+vars_in_XAXB <- reactive({
+  req(X_A())
+  req(X_B())
+  nm_a <- names(X_A())
+  nm_b <- names(X_B())
+  nm_a_only <- nm_a[!(nm_a %in% nm_b)]; naonly <- length(nm_a_only)
+  nm_b_only <- nm_b[!(nm_b %in% nm_a)]; nbonly <- length(nm_b_only)
+  nm_common <- nm_a[(nm_a %in% nm_b)]; nc <- length(nm_common)
+  tibble(
+    "Recipient" = c(nm_a_only, nm_common, rep(NA, nbonly)),
+    "Donor" = c(rep(NA, naonly), nm_common, nm_b_only)
+  )
+})
+
+renderTable({
+  req(vars_in_XAXB())
+  vars_in_XAXB()
+})
+```
+
+
+colonna display
+-----------------------------------------------------------------------
+
+### Descriptive statistics for variables in $\mathbf{X}_A$ and $\mathbf{X}_B$
+
+```{r}
+out_harmonization <- reactive({
+  req(input$i3check_names_var)
+  rsel <- input$i3check_names_var
+  
+  out <- list()
+  
+  common_var <- ifelse(rsel %in% names(X_A()) & rsel %in% names(X_B()) , TRUE, FALSE)
+  
+  varA <- ifelse(rsel %in% names(X_A())[!names(X_A()) %in% names(X_B())], TRUE, FALSE)
+  varB <- ifelse(rsel %in% names(X_B())[!names(X_B()) %in% names(X_A())], TRUE, FALSE)
+  
+  # variabili in comune
+  if(common_var){
+    
+    vA <- select(X_A(), all_of(rsel))[[1]]
+    vB <- select(X_B(), all_of(rsel))[[1]]
+    tb_AB <- bind_rows(
+      tibble(vn = "Recipient", val = vA),
+      tibble(vn = "Donor", val = vB)
+    )
+    
+    type_check <- ifelse(class(vA) == class(vB), "ok", "non ok")
+    out$type_check <- type_check
+    
+    if(type_check == "non ok"){
+      out$type <- c(class(vA), class(vB))
+    } else {
+      out$type <- class(vA)
+    }
+    
+    if(type_check == "ok"){
+      
+      if(out$type == "factor"){
+        categories_chcek <- ifelse(all(levels(vA) == levels(vB)),
+                                   "okmod", "nonokmod")
+        out$categories_chcek <- categories_chcek
+        
+        if(categories_chcek == "okmod"){
+          freq_tab <- tibble(
+            levels = levels(vA),
+            a_N = c(table(vA)),
+            b_N = c(table(vB)),
+            a_f = a_N / sum(a_N),
+            b_f = b_N / sum(b_N)
+          )
+          out$sum_tab <- freq_tab
+          out$plot <- tb_AB %>% group_by(vn, val) %>%
+            summarise(n = n()) %>%
+            mutate(n = n / sum(n)) %>% 
+            ggplot(aes(x = val, y = n, group = as.factor(vn), fill = vn)) +
+            geom_bar(position="dodge", stat="identity")
+        }
+        
+        if(categories_chcek == "nonokmod"){
+          freq_tab_a <- tibble(
+            db = "Recipient",
+            levels = levels(vA),
+            N = c(table(vA)),
+            f = N / sum(N)
+          )
+          freq_tab_b <- tibble(
+            db = "Donor",
+            levels = levels(vB),
+            N = c(table(vB)),
+            f = N / sum(N)
+          )
+          out$sum_tab <- bind_rows(freq_tab_a, freq_tab_b)
+          out$plot <- tb_AB %>% group_by(vn, val) %>%
+            summarise(n = n()) %>%
+            mutate(n = n / sum(n)) %>% 
+            ggplot(aes(x = val, y = n)) +
+            geom_bar(position="dodge", stat="identity") +
+            facet_wrap(~vn)
+        }
+      }
+      
+      if(class(vA) == "numeric" | class(vA) == "integer"){
+        sum_va <- summary(vA)
+        sum_vb <- summary(vB)
+        
+        sum_va <- tibble(
+          name_s = names(sum_va),
+          a_N = c(unname(sum_va))
+          
+        )
+        sum_vb <- tibble(
+          name_s=names(sum_vb),
+          b_N = c(unname(sum_vb))
+        )
+        sum_vab <- full_join(sum_va, sum_vb)
+        out$sum_tab <- sum_vab
+        out$plot <- tb_AB %>%
+          ggplot(aes(x = val, group = vn, col = vn)) +
+          geom_histogram()
+        
+      }
+    }
+  }
+  
+  if(varA){
+    out$type_check <- 0
+    vA <- select(X_A(), all_of(rsel))[[1]]
+    out$type <- class(vA)
+    tb_AB <-tibble(vn = "Recipient", val = vA)
+    if(class(vA) == "factor"){
+      freq_tab <- tibble(
+        levels = levels(vA),
+        a_N = c(table(vA)),
+        a_f = a_N / sum(a_N)
+      )
+      out$sum_tab <- freq_tab
+      out$plot <- tb_AB %>% group_by(vn, val) %>%
+        summarise(n = n()) %>%
+        mutate(n = n / sum(n)) %>% 
+        ggplot(aes(x = val, y = n, group = as.factor(vn), fill = vn)) +
+        geom_bar(position="dodge", stat="identity")
+    }
+    
+    if(class(vA) == "numeric" | class(vA) == "integer"){
+      sum_va <- summary(vA)
+      sum_va <- tibble(
+        name_s = names(sum_va),
+        a_N = c(unname(sum_va))
+        
+      )
+      sum_vab <- sum_va
+      out$sum_tab <- sum_vab
+      out$plot <- tb_AB %>%
+        ggplot(aes(x = val, group = vn, col = vn)) +
+        geom_histogram()
+      
+    }
+  }
+  
+  if(varB){
+    out$type_check <- 0
+    vA <- select(X_B(), all_of(rsel))[[1]]
+    out$type <- class(vA)
+    tb_AB <-tibble(vn = "Donor", val = vA)
+    if(class(vA) == "factor"){
+      freq_tab <- tibble(
+        levels = levels(vA),
+        a_N = c(table(vA)),
+        a_f = a_N / sum(a_N)
+      )
+      out$sum_tab <- freq_tab
+      out$plot <- tb_AB %>% group_by(vn, val) %>%
+        summarise(n = n()) %>%
+        mutate(n = n / sum(n)) %>% 
+        ggplot(aes(x = val, y = n, group = as.factor(vn), fill = vn)) +
+        geom_bar(position="dodge", stat="identity")
+    }
+    
+    if(class(vA) == "numeric" | class(vA) == "integer"){
+      sum_va <- summary(vA)
+      sum_va <- tibble(
+        name_s = names(sum_va),
+        a_N = c(unname(sum_va))
+        
+      )
+      sum_vab <- sum_va
+      out$sum_tab <- sum_vab
+      out$plot <- tb_AB %>%
+        ggplot(aes(x = val, group = vn, col = vn)) +
+        geom_histogram()
+      
+    }
+  }
+  out
+})
+```
+
+```{r}
+fillCol(flex = c(1, 5),
+        fillRow(flex = c(1,2),
+                renderUI({
+                  req(X_A(), X_B())
+                  my_choices <- unique(c(names(X_A()), names(X_B())))
+                  pickerInput(inputId = "i3check_names_var", label = NULL, 
+                              choices = my_choices, multiple = TRUE, selected = NULL, 
+                              options = pkr_opt)
+                }),
+                renderUI({
+                  req(out_harmonization())
+                  #renderPrint({
+                  if(out_harmonization()$type_check == "ok"){
+                    pout <- paste0(
+                      "Variable is of the same type in Recipient and Donor (", out_harmonization()$type, ")")
+                    if(out_harmonization()$type == "factor"){
+                      if(out_harmonization()$categories_chcek == "okmod"){
+                        pout <- paste0(pout, "and they share the same levels.")
+                      }
+                      if(out_harmonization()$categories_chcek == "nonokmod"){
+                        pout <- paste0(pout, "but they do not share the same levels (see table below).")
+                      }
+                    }
+                  }
+                  if(out_harmonization()$type_check == "non ok"){
+                    pout <- paste0("Variable type in the Recipient is ", out_harmonization()$type[1], 
+                                   "while in the Donor is ", out_harmonization()$type[2])
+                  }
+                  if(out_harmonization()$type_check == 0){
+                    pout <- paste0("Variable type is ", out_harmonization()$type[1])
+                  }
+                  
+                  pout
+                  #})
+                })
+        ),
+        fillRow(flex = c(1,2),
+                renderTable({
+                  req(out_harmonization())
+                  out_harmonization()$sum_tab
+                }),
+                renderPlot({
+                  req(out_harmonization())
+                  out_harmonization()$plot
+                })
+        )
+)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+

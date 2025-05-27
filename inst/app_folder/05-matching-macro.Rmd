@@ -1,0 +1,195 @@
+Sidebar  {.sidebar}
+-----------------------------------------------------------------------
+
+### 
+
+```{r}
+db_match_A <- reactive({
+  req(X_A())
+  na.omit(bind_cols(Info_A()["key_recipient"], X_A()))
+})
+db_match_B <- reactive({
+  req(X_B())
+  na.omit(bind_cols(Info_B()["key_donor"], X_B()))
+})
+
+# pickers selezione delle variabili
+renderUI({
+  req(db_match_A())
+  req(db_match_B())
+  
+  names_all_A <- c(names(db_match_A()))[!(c(names(db_match_A()))%in%c(names(db_match_B())))]
+  names_all_A <- names_all_A[!(names_all_A == "key_recipient")]
+  names_all_B <-c(names(db_match_B()))[!(c(names(db_match_B()))%in%c(names(db_match_A())))]
+  names_all_B <- names_all_B[!(names_all_B == "key_donor")]
+  names_all <- c(names(db_match_B()))[(c(names(db_match_B()))%in%c(names(db_match_A())))]
+  
+  tagList(
+    pickerInput(inputId = "y_macro_recipient", label = "Select Y from the recipient",
+                choices = names_all_A, multiple = TRUE, selected = NULL,
+                options = pkr_opt),
+    pickerInput(inputId = "z_macro_donor", label = "Select Z from the donor",
+                choices = names_all_B, multiple = TRUE, selected = NULL,
+                options = pkr_opt),
+    pickerInput(inputId = "match_macro_vars", label = "Select matching variables",
+                choices = names_all, multiple = TRUE, selected = NULL,
+                options = pkr_opt)
+  )
+})
+
+# pickers selezione metodo di matching
+renderUI({
+  req(input$y_macro_recipient)
+  req(input$z_macro_donor)
+  req(input$match_macro_vars)
+  
+  if(is.numeric(db_match_A()[[input$y_macro_recipient]]) && is.numeric(db_match_B()[[input$z_macro_donor]])){
+    pickerInput("macro_matching_method", label = "Parametric methods",
+                choices = c("ML", "MS"),
+                selected = NULL, multiple = TRUE,
+                options = pkr_opt)
+  }
+  else if(all(
+    is.factor(db_match_A()[[input$y_macro_recipient]]),
+    is.factor(db_match_B()[[input$z_macro_donor]]),
+    all(sapply(db_match_B()[, input$match_macro_vars, drop = FALSE], is.factor)))){
+    pickerInput("macro_matching_method", label = "Parametric methods",
+                choices = c("Multinomial method"),
+                selected = NULL, multiple = TRUE,
+                options = pkr_opt)
+  }
+})
+
+db_all <- reactive({
+  req(input$macro_matching_method == "Multinomial method")
+  rbind(db_match_A()[,c(input$match_macro_vars)], db_match_B()[,c(input$match_macro_vars)])
+})
+
+renderUI({
+  req(input$macro_matching_method)
+  actionButton("btn_fai_matching", label = "Click when done", icon("paper-plane"))
+})
+```
+Colonna produzione output {.tabset data-width=300}
+-----------------------------------------------------------------------
+
+### Output matching
+```{r}
+output_macro_matching <- eventReactive(input$btn_fai_matching, {
+  req(input$macro_matching_method)
+  
+  if(input$macro_matching_method == "MS"){
+    out <- mixed.mtc(
+      data.rec = as.data.frame(db_match_A()), 
+      data.don = as.data.frame(db_match_B()), 
+      match.vars = input$match_macro_vars, 
+      y.rec = input$y_macro_recipient, 
+      z.don = input$z_macro_donor, 
+      method = "MS",
+      rho.yz = NULL, 
+      micro = FALSE, 
+      constr.alg = "Hungarian"
+    )
+  } 
+  if(input$macro_matching_method == "ML"){
+    out <- mixed.mtc(
+      data.rec = as.data.frame(db_match_A()), 
+      data.don = as.data.frame(db_match_B()), 
+      match.vars = input$match_macro_vars, 
+      y.rec = input$y_macro_recipient, 
+      z.don = input$z_macro_donor, 
+      method = "ML",
+      rho.yz = NULL, 
+      micro = FALSE, 
+      constr.alg = "Hungarian"
+    )
+  }
+  if(input$macro_matching_method == "Multinomial method"){
+    tab.x <- table(db_all()[input$match_macro_vars])
+    tab.xy <- table(db_match_A()[c(input$match_macro_vars,input$y_macro_recipient)])
+    tab.xz <- table(db_match_B()[c(input$match_macro_vars,input$z_macro_donor)])
+    out <- Frechet.bounds.cat(
+      tab.x, tab.xy, tab.xz, print.f="tables", align.margins = FALSE,
+      tol= 0.001, warn = TRUE
+    )
+  }
+  out
+})
+
+renderPrint({
+  req(output_macro_matching())
+  output_macro_matching()
+})
+```
+
+### See recipient
+```{r}
+fillCol(flex = c(1,9),
+        renderUI({
+          req(db_match_A())
+          pout <- paste0("Number of observations: ",  nrow(db_match_A()), 
+                         " (removed ", nrow(Info_A()) - nrow(db_match_A()), " missing observations).")
+          pout
+        }),
+        DT::renderDT({
+          DT::datatable(db_match_A(), rownames = FALSE)
+        })
+)
+```
+### See donor
+```{r}
+fillCol(flex = c(1,9),
+        renderUI({
+          req(db_match_B())
+          pout <- paste0("Number of observations: ",  nrow(db_match_B()), 
+                         " (removed ", nrow(Info_B()) - nrow(db_match_B()), " missing observations).")
+          pout
+        }),
+        DT::renderDT({
+          DT::datatable(db_match_B(), rownames = FALSE)
+        })
+)
+```
+
+Download {data-navmenu="Macro Matching"}
+=================================================================
+
+Sidebar  {.sidebar}
+-----------------------------------------------------------------------
+
+### Download {data-height=100}
+
+Click here to download the output.
+
+```{r}
+output$downloadlistmacro <- downloadHandler(
+  filename = function() { 
+    paste("match_out-", Sys.Date(), ".rds", sep="")
+  },
+  content = function(file) {
+    write_rds(output_macro_matching(), file)
+  })
+
+output$downloadUImacro <- renderUI({
+  downloadButton('downloadlistmacro', 'Download output', style = "width:210px;", 
+                 style="color: #fff; background-color: #337ab7; border-color: #2e6da4")
+})
+
+uiOutput("downloadUImacro")
+```
+
+ciccio
+-------------------------------------------------------------------------
+
+### 
+
+```{r}
+renderPrint({
+  req(output_macro_matching())
+  output_macro_matching()
+})
+```
+
+
+
+

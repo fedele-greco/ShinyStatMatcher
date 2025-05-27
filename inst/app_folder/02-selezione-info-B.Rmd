@@ -1,0 +1,75 @@
+selezione vars B (sx) {data-width=500}
+-----------------------------------------------------------------------
+
+### Select information from the donor survey ($\mathbf{\mathcal{I}}_B$)
+
+```{r}
+Bk <- reactive({
+  req(B())
+  if(is.null(input$key_var_B)){
+    out <- bind_cols(key_donor = 1:nrow(B()), B())
+  } else {
+    out <- B()
+    names(out)[names(out) == input$key_var_B] <- "key_donor"
+    out <- out %>% select("key_donor", everything())
+  }
+  out
+})
+```
+
+```{r}
+DT::DTOutput("i2B_vars")
+
+vars_B <- reactive({
+  req(Bk())
+  ch_B <- names(Bk())
+  ch_B <- ch_B[!(ch_B %in% "key_donor")]
+  tibble("Variable Name" = ch_B,
+         Label = sapply(ch_B, function(var) {
+           lbl <- var_label(Bk()[[var]])
+           if (is.null(lbl)) "No label provided" else lbl  # Replace NULL with an empty string
+         }),
+         Type = sapply(ch_B, function(var) {
+           class(Bk()[[var]])
+         })
+  )
+})
+
+output$i2B_vars <- DT::renderDT({
+  req(vars_B())
+  DT::datatable(vars_B(),
+                rownames = FALSE,
+                filter='top',
+                selection = 'multiple')
+})
+
+Info_BR <- reactiveVal()
+
+Info_B <- reactive({
+  req(Bk())
+  req(input$i2B_vars_rows_selected)
+  Bk()[, c(1, input$i2B_vars_rows_selected + 1)]
+})
+
+observeEvent(input$i2B_vars_rows_selected,{
+  Info_BR(Info_B())             
+})
+
+
+
+```
+
+Selected info B (dx) {data-width=500}
+-----------------------------------------------------------------------
+
+### Selected info from the donor survey ($\mathbf{\mathcal{I}}_B$)
+
+```{r}
+DT::renderDT({
+  req(input$i2B_vars_rows_selected)
+  DT::datatable(vars_B()[
+    input$i2B_vars_rows_selected,], rownames = FALSE)
+})
+```
+
+

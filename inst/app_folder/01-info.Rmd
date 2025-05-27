@@ -1,0 +1,203 @@
+Sidebar  {.sidebar}
+-----------------------------------------------------------------------
+```{r}
+checkboxInput("import_surv", label = HTML("<b>Upload a file</b>"))
+
+renderUI({
+  if(input$import_surv){
+    textInput("name_import_surv", label = "Name of the imported dataset")
+  } 
+})
+```
+```{r}
+renderUI({
+  req(input$name_import_surv)
+  if(isTruthy(input$name_import_surv) & input$import_surv){
+    tagList(fileInput("file_import_surv", "Choose file",
+              multiple = FALSE, accept = NULL,
+              width = NULL, buttonLabel = "Browse",
+              placeholder = "No file selected"
+    ),
+     tags$style("
+             .btn-file {  
+             background-color:#337ab7; 
+             }
+             .progress-bar {
+             background-color:#337ab7;
+             }"))}
+})
+```
+```{r}
+renderUI({
+  req(input$name_import_surv)
+  if(isTruthy(input$name_import_surv) & input$import_surv){
+    actionButton("add_surv_file", "Add to available surveys", icon("paper-plane"), width = "100%",
+                 style="color: #fff; background-color: #337ab7; border-color: #2e6da4")}
+})
+observeEvent(input$add_surv_file, {
+  file <- input$file_import_surv
+  indagini[[input$name_import_surv]] <- rio::import(file$datapath, setclass = "tbl")
+  updateCheckboxInput(inputId = "import_surv", value = FALSE)
+})
+
+```
+
+**Available surveys **
+```{r}
+renderUI({
+  radioButtons(inputId = "i1_indagini", label =  NULL, 
+               choices =  names(indagini), selected = nomi_indagini[1])
+})
+```
+<br>
+
+**Choose dataset A (the recipient)**
+
+```{r}
+renderUI({
+  pickerInput(inputId = "i1_A", label = NULL, 
+              choices = names(indagini), multiple = TRUE, selected = NULL, 
+              options = pkr_opt)
+})
+
+A <- reactive({
+  req(input$i1_A)
+  indagini[[input$i1_A]]
+})
+
+renderUI({
+  req(input$i1_A)
+  vs <- names(indagini[[input$i1_A]])
+  pickerInput(
+    inputId = "key_var_A", label = "Key variable", 
+    choices = vs, multiple = TRUE, selected = NULL, 
+    options = pkr_opt)
+})
+
+```
+<br>
+
+**Choose dataset B (the donor)**
+
+```{r}
+renderUI({
+  pickerInput(
+    inputId = "i1_B", label = NULL, 
+    choices = names(indagini), multiple = TRUE, selected = NULL, 
+    options = pkr_opt)
+})
+B <- reactive({
+  req(input$i1_B)
+  indagini[[input$i1_B]]
+})
+
+renderUI({
+  req(input$i1_B)
+  vs <- names(indagini[[input$i1_B]])
+  pickerInput(
+    inputId = "key_var_B", label = "Key variable", 
+    choices = vs, multiple = TRUE, selected = NULL, 
+    options = pkr_opt)
+})
+
+```
+
+Colonna summary {.tabset data-width=300}
+-----------------------------------------------------------------------
+
+### `r reactive({req(input$i1_indagini); paste0("Basic Info - ", input$i1_indagini)})`
+```{r}
+fillCol(flex = c(1,2,8),
+        renderUI({
+          req(input$i1_indagini)
+          pout <- paste0("The dataset contains ",  nrow(indagini[[input$i1_indagini]]), 
+                         " observations on ", ncol(indagini[[input$i1_indagini]]), " variables.")
+          pout
+        }),
+        renderUI({
+          req(input$i1_indagini)
+          pickerInput(inputId = "var_sum_info", 
+                      label = "Select a variable to summarise", 
+                      choices = names(indagini[[input$i1_indagini]]), 
+                      multiple = TRUE, selected = NULL, 
+                      options = pkr_opt)
+        }),
+        fillRow(flex = c(1,2),
+                renderTable({
+                  req(input$var_sum_info)
+                  req(input$i1_indagini)
+                  vts <- indagini[[input$i1_indagini]][[input$var_sum_info]]
+                  if (is.numeric(vts)) {
+                    out <- summary(vts)
+                  } else if (is.factor(vts)) {
+                    out <- prop.table(table(vts, useNA = "ifany")) * 100
+                  }
+                  out <- tibble(
+                    " " = names(out),
+                    out
+                  )
+                  names(out)[2] <- input$var_sum_info
+                  out
+                }),
+                renderPlotly({
+                  req(input$var_sum_info)
+                  req(input$i1_indagini)
+                  
+                  vts <- indagini[[input$i1_indagini]][[input$var_sum_info]]
+                  db <- tibble(vts)
+                  names(db) <- input$var_sum_info
+                  
+                  if (is.numeric(vts)){
+                    out <- plotly::ggplotly(
+                      ggplot(db, aes_string(x = input$var_sum_info)) + 
+                        geom_histogram() + 
+                        theme_bw())
+                  }
+                  if (is.factor(vts)) {
+                    out <- plotly::ggplotly(
+                      ggplot(db, aes_string(x = input$var_sum_info)) + 
+                        geom_bar() + 
+                        theme_bw())
+                  }
+                  out
+                })       
+        )
+)
+```
+
+
+### `r reactive({req(input$i1_indagini); paste0("Variables in - ", input$i1_indagini)})`
+
+```{r}
+DT::renderDT({
+  req(input$i1_indagini)
+  DT::datatable(data.frame(
+    Variables = names(indagini[[input$i1_indagini]]),
+    Label = sapply(names(indagini[[input$i1_indagini]]), function(var) {
+      lbl <- var_label(indagini[[input$i1_indagini]][[var]])
+      if (is.null(lbl)) "" else lbl  # Replace NULL with an empty string
+    }),
+    Type = map_chr(indagini[[input$i1_indagini]], class)), rownames = FALSE)
+})
+
+```
+
+### See all data
+
+```{r}
+checkboxInput("see_whole", "Check if you want to see the db", value = FALSE, width = NULL)
+renderUI({
+  req(input$i1_indagini)
+  if(input$see_whole){
+    DT::renderDT({
+      DT::datatable(indagini[[input$i1_indagini]])
+    })
+  }
+})
+```
+
+
+
+
+
+

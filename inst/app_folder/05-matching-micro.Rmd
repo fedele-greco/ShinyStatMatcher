@@ -1,0 +1,198 @@
+Sidebar  {.sidebar}
+-----------------------------------------------------------------------
+
+### 
+
+```{r}
+vars_db_match_B <- reactive({
+  req(db_match_A(), db_match_B())
+  out <- c(names(db_match_B()))[!(c(names(db_match_B()))%in%c(names(db_match_A())))]
+  out[!(out == "key_donor")]
+})
+
+vars_db_match_AB <- reactive({
+  req(db_match_A(), db_match_B())
+  out <- c(names(db_match_B()))[(c(names(db_match_B()))%in%c(names(db_match_A())))]
+  out
+})
+
+# pickers selezione delle variabili (3 per macro 2 per micro)
+renderUI({
+  req(vars_db_match_AB(), vars_db_match_B())
+  tagList(
+    pickerInput(
+      inputId = "z_donor", label = "Select Z from the donor",
+      choices = vars_db_match_B(), multiple = TRUE, selected = NULL,
+      options = pkr_opt),
+    pickerInput(
+      inputId = "match_vars", label = "Select matching variables",
+      choices = vars_db_match_AB(), multiple = TRUE, selected = NULL,
+      options = pkr_opt)
+  )
+})
+
+# pickers selezione metodo di matching
+renderUI({
+  req(input$z_donor, input$match_vars)
+  
+  if (is.factor(db_match_B()[[input$z_donor]])){
+    match_methods <- micro_methods$nonparametric_noRank
+    if (length(input$match_vars) == 1 && is.numeric(db_match_B()[[input$match_vars]])){
+      match_methods <- c(micro_methods$nonparametric)
+    }
+  }
+  if (is.numeric(db_match_B()[[input$z_donor]])){
+    if (length(input$match_vars) == 1 && is.numeric(db_match_B()[[input$match_vars]])){
+      match_methods <- c(micro_methods$parametric, micro_methods$nonparametric)
+    } else{
+      match_methods <- c(micro_methods$parametric, micro_methods$nonparametric_noRank)
+    }
+  }
+  pickerInput("micro_matching_method", label = "Methods",
+              choices = match_methods,
+              selected = NULL, multiple = TRUE,
+              options = pkr_opt)
+})
+
+# se si deve usare constrained per i metodi per cui serve
+renderUI({
+  req(input$micro_matching_method %in% micro_methods$nonparametric)
+  tagList(
+    pickerInput(inputId = "constr", label = "Constrained",
+                choices = c("Yes","No"), multiple = FALSE, selected = NULL,
+                options = pkr_opt),
+    pickerInput(inputId = "STRAT", label = "Donation classes",
+                choices = c("NO","YES"),
+                multiple = FALSE, selected = NULL, options = pkr_opt),
+    renderUI({
+      req(input$STRAT == "YES")
+      lbs <- vars_db_match_AB()[!(vars_db_match_AB() %in% c(input$z_donor, input$match_vars))]
+      o1 <- select(db_match_B(), all_of(lbs))
+      o1 <- select(o1, where(is.factor))
+      lbs <- names(o1)
+      pickerInput(inputId = "don_vars", label = "Select donation classes",
+                  choices = c(NULL,lbs), multiple = TRUE, selected = NULL,
+                  options = pkr_opt)
+    })
+  )
+})
+
+# appare solo se ci sono sonation classes e mostra solo quelle non già scelte e non y o z
+renderUI({
+  req(input$micro_matching_method %in% micro_methods$nonparametric_dist)
+  if(all(sapply(db_match_B()[, input$match_vars, drop = FALSE], is.factor))){
+    dist_choices <- c("exact","exact matching")
+  } else if(all(sapply(db_match_B()[, input$match_vars, drop = FALSE], is.numeric))){
+    dist_choices <- c("Manhattan", "Euclidean", "Mahalanobis", "minimax")
+  } else {
+    dist_choices <- c("Gower")
+  }
+  pickerInput(
+    inputId = "dists", label = "Select a Distance",
+    choices = dist_choices, multiple = FALSE, selected = NULL,
+    options = pkr_opt
+  )
+})
+
+renderUI({
+  req(input$micro_matching_method)
+  actionButton("btn_fai_matching_micro", label = "Click when done", icon("paper-plane"))
+})
+```
+Colonna produzione output {.tabset data-width=300}
+-----------------------------------------------------------------------
+
+### Matched data
+
+```{r}
+matched_final <- eventReactive(input$btn_fai_matching_micro, {
+  req(input$micro_matching_method)
+  
+  shinybusy::show_modal_spinner(spin = "cube-grid",
+                                color = "firebrick",
+                                text = "Please wait, the algorithm is running...")
+  
+  if(input$micro_matching_method %in% micro_methods$parametric){
+    formula <- as.formula(paste(input$z_donor, "~", paste(input$match_vars, collapse = "+")))
+    out <- lm(formula, data = db_match_B())
+  }
+  
+  if(input$micro_matching_method %in% micro_methods$nonparametric){
+    req(input$STRAT)
+    req(input$constr)
+    is_constrained <- ifelse(input$constr == "Yes", TRUE, FALSE)
+    don_class <- NULL
+    match_variables <- NULL
+    if(input$STRAT == "YES"){
+      req(input$don_vars)
+      don_class <- input$don_vars
+    }
+    if(isTruthy(input$match_vars)){
+      match_variables <- input$match_vars
+    }
+    if(input$micro_matching_method == "Non-parametric: Random Hot Deck"){
+      out <- RANDwNND.hotdeck(
+        data.rec = as.data.frame(db_match_A()), data.don = as.data.frame(db_match_B()), 
+        match.vars = NULL, don.class = don_class, constrained = is_constrained)
+    }
+    if(input$micro_matching_method == "Non-parametric: Rank Hot Deck"){
+      out <- rankNND.hotdeck(
+        data.rec = as.data.frame(db_match_A()), data.don = as.data.frame(db_match_B()), 
+        var.rec = match_variables, don.class = don_class,
+        constrained = is_constrained, constr.alg = "Hungarian") 
+    }
+    if(input$micro_matching_method == "Non-parametric: Distance Hot Deck"){
+      req(input$dists)
+      out <- NND.hotdeck(
+        data.rec = as.data.frame(db_match_A()), data.don = as.data.frame(db_match_B()), 
+        dist.fun = input$dists, match.vars = input$match_vars, 
+        don.class = input$don_vars, constrained = is_constrained)
+    }
+    if(input$micro_matching_method == "Non-parametric: Random Distance Hot Deck"){
+      req(input$dists)
+      out <- RANDwNND.hotdeck(
+        data.rec = as.data.frame(db_match_A()), data.don = as.data.frame(db_match_B()), 
+        dist.fun = input$dists, match.vars = input$match_vars, 
+        don.class = input$don_vars, constrained = is_constrained)
+    }
+  }
+  
+  out_db <- db_match_A()
+  out_db$Z_match <- NA
+  if(input$micro_matching_method %in% micro_methods$nonparametric){
+    donatore <- db_match_B()[as.numeric(out$mtc.ids[,2]), c("key_donor", input$z_donor)]
+    recipiente <- db_match_A()[as.numeric(out$mtc.ids[,1]), c("key_recipient")]
+    recipiente <- bind_cols(recipiente, Z_match = donatore[[input$z_donor]])
+    out_db <- left_join(db_match_A(), recipiente)
+  }
+  if (input$micro_matching_method == "Parametric: Conditional mean matching" ){
+    out_db$Z_match <- predict(out, db_match_A())
+  } 
+  if (input$micro_matching_method == "Parametric: Stochastic regression" ){
+    epsilon <- rnorm(nrow(db_match_A()), mean = 0, sd = sigma(out))
+    out_db$Z_match <- predict(out, db_match_A()) + epsilon
+  }
+  shinybusy::remove_modal_spinner()
+  out_db
+  
+})
+
+DT::renderDT({
+  req(matched_final())
+  matched_final()
+})
+```
+
+### See recipient
+```{r}
+DT::renderDT({
+  db_match_A()
+})
+```
+
+### See donor
+```{r}
+DT::renderDT({
+  db_match_B()
+})
+```
